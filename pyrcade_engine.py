@@ -20,7 +20,7 @@ class Logger:
     def log(self, type: Literal['ENGINE', 'INFO', 'WARN', 'ERROR'], message = 'undefined log message'):
         timestamp = datetime.datetime.now().strftime(f'[%d-%m-%Y] [%H:%M:%S]')
         self.logfile.write(f"{timestamp} [{type}] {message}\n")
-
+'''
 class Sprite:
     """
     Main sprite class for handling sprite graphic data.
@@ -128,20 +128,76 @@ class Sprite:
                         pixel_raw_data.append("nop")
                         color_raw_data.append("")
         return (pixel_raw_data, color_raw_data)   
+'''
+
+class Sprite:
+    '''
+    Base graphical class, used to create sprites and animated sprites for the game engine
+    '''
+    sprite_data_file = None #Reference to a file containing all the data of the sprite
+    dimensions: Tuple[int, int] = (0, 0) #Width and height of the sprite
+    animations: dict = {} #Dictionary containing all the animation data of the sprite
+    current_animation: int = -1 #The index of the current animation being played
+    current_frame: int = -1 #The index of the current frame being displayed
+    loop: bool = False #Whether the animation should loop or not
+    color_palette: list = ["#00000000"] #List containing the color palette of the sprite, each color declared as a hex value in the list, index 0 must be transparent (transparent pixels, even is semi transparent, are gonna be represented as no pixel, so the engine will not draw them, and will draw the pixel in the layer behind it instead)
+    sprite_data: list = [] #List containing the raw "pixel" data of the sprite, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
+
+    def __init__(self, sprite_data_file: str):
+        '''
+        Base graphical class, used to create sprites and animated sprites for the game engine
+        '''
+        self.sprite_data_file = sprite_data_file
+
+    def _load_data(self):
+        '''
+        INTERNAL METHOD - DO NOT CALL DIRECTLY\n
+        Loads the sprite data from the sprite_data_file and fills the class attributes with the corresponding data
+        
+        ---
+        Pending: Make sprite editor gui program to make sprite editing easier, and make sprite data consistent and easy to read/write
+        '''
+        with open(self.sprite_data_file, 'r') as f:
+            reading_block = False
+            block_type = ''
+            frame = []
+            for line in f:
+                line = line.strip()
+                if line.startswith('[') and line.endswith(']'):
+                    reading_block = True
+                    block_type = line[1:-1]
+                elif reading_block:
+                    if line == '[block_end]':
+                        if block_type == 'sprite_data':
+                            self.sprite_data.append(frame)
+                            frame = []
+                        reading_block = False
+                        block_type = ''
+                    elif block_type == 'dimensions':
+                        self.dimensions = tuple(line.split(','))
+                    elif block_type == 'animations':
+                        anim_name, anim_data = line.split(':')
+                        self.animations[anim_name] = list(anim_data.split(','))
+                    elif block_type == 'color_palette':
+                        self.color_palette.append(line.split(','))
+                    elif block_type == 'sprite_data':
+                        frame.append(line)
+                    
+                        
 
 class Screen:
     """
     Class that manages everything related to graphic rendering
     Arguments:
-        height:     The height of the screen in characters.
-        width:      The width of the screen in characters.
+        height:     The height of the screen in characters
+        width:      The width of the screen in characters
     """
     def __init__(self, height: int, width: int):
         """
         Class that manages everything related to graphic rendering
         Arguments:
-            height:     The height of the screen in characters.
-            width:      The width of the screen in characters.
+            height:     The height of the screen in characters
+            width:      The width of the screen in characters
         """
         self.height = height
         self.width = width
