@@ -1,7 +1,8 @@
-import time, sys, pynput, random, datetime, threading, os, string
+import sys, pynput, random, datetime, os, tkinter
 from typing import Literal, Tuple
 from copy import deepcopy
 from tcolors import TrueColor, BgTrueColor, Mod
+from PIL import Image, ImageDraw
 
 DEBUG = True
 
@@ -24,116 +25,6 @@ class Logger:
 
 EngineLogger = Logger()
 
-'''
-class Sprite:
-    """
-    Main sprite class for handling sprite graphic data.
-    Arguments:
-        name:           The name of the sprite.
-        width:          The width of the sprite in pixels.
-        height:         The height of the sprite in pixels.
-        sprite_data:    A list of strings representing the pixel data of the sprite.
-        color_mode:     The color mode of the sprite ("single", "pixel", "single_custom", "pixel_custom").
-        color_data:     A list of strings representing the color data of the sprite.
-        sprite_mode:    The sprite mode ("single" for single-frame sprites, "multi" for multi-frame sprites).
-        sprite_cuantity:The number of frames in the sprite (only for multi-frame sprites).
-    """
-    def __init__(self, name: str, width: int, height: int, sprite_data: list[str], color_mode: Literal["single", "pixel", "single_custom", "pixel_custom"] = "single", color_data: list[str] = None, sprite_mode: Literal["single", "multi"] = "single", sprite_cuantity: int = 1, extra_val_1 = None, extra_val_2 = None, extra_val_3 = None):
-        """
-        Main sprite class for handling sprite graphic data.
-        Arguments:
-            name:           The name of the sprite.
-            width:          The width of the sprite in pixels.
-            height:         The height of the sprite in pixels.
-            sprite_data:    A list of strings representing the pixel data of the sprite.
-            color_mode:     The color mode of the sprite ("single", "pixel", "single_custom", "pixel_custom").
-            color_data:     A list of strings representing the color data of the sprite.
-            sprite_mode:    The sprite mode ("single" for single-frame sprites, "multi" for multi-frame sprites).
-            sprite_cuantity:The number of frames in the sprite (only for multi-frame sprites).
-        """
-        self.width = width
-        self.height = height
-        self._color_mode = color_mode
-        self._valid_data = True
-        self.name = name
-        self.sprite_mode = sprite_mode
-        self._sprite_cuantity = sprite_cuantity
-        self.extra1 = extra_val_1
-        self.extra2 = extra_val_2
-        self.extra3 = extra_val_3
-
-        # data type validator
-        if type(color_data) != list and color_mode == "pixel":
-            color_data = []
-            for px in range(len(sprite_data)):
-                color_data.append(" ")
-        elif type(color_data) != str and color_mode == "single":
-            color_data = " "
-
-        # data size validator
-        if  (len(sprite_data) != self.width * self.height) and self.sprite_mode == "single":
-            self._valid_data = False
-        elif (len(sprite_data) != self.width * self.height * sprite_cuantity) and self.sprite_mode == "multi":
-            self._valid_data = False
-        elif len(sprite_data) != len(color_data) and color_mode == "pixel":
-            self._valid_data = False
-
-        self.readable_data = (sprite_data, color_data)
-
-    def load_raw(self, frame = 0):
-        """
-        Loads the raw pixel and color data for the specified frame.\n
-        Returns a tuple containing two lists: pixel_raw_data and color_raw_data.
-        Arguments:
-            frame:  The frame number to load (for multi-frame sprites).
-        """
-        pixel_data = self.readable_data[0]                                                 
-        color_data = self.readable_data[1]                                                 
-        pixel_raw_data = []
-        color_raw_data = []
-        offset = self.height * self.width * frame                                                    
-        for row in range(self.height):                                                                                                                                        
-            for pixel in range(self.width):
-                index = (row * self.width) + pixel + offset
-                if self._color_mode == "pixel":
-                    if pixel_data[index] != "nop":
-                        if color_data[index] == " ":
-                            pixel_raw_data.append(str(pixel_data[index]))
-                            color_raw_data.append("")
-                        else:
-                            pixel_raw_data.append(str(pixel_data[index]))
-                            color_raw_data.append(str(preset_color_codes.get(color_data[index], "")))
-                    else:
-                        pixel_raw_data.append("nop")
-                        color_raw_data.append("")
-                elif self._color_mode == "single":
-                    if pixel_data[index] != "nop":
-                        pixel_raw_data.append(pixel_data[index])
-                        color_raw_data.append(preset_color_codes.get(color_data, ""))
-                    else:
-                        pixel_raw_data.append("nop")
-                        color_raw_data.append("")
-                elif self._color_mode == "single_custom":
-                    if pixel_data[index] != "nop":
-                        pixel_raw_data.append(pixel_data[index])
-                        color_raw_data.append(color_data)
-                    else:
-                        pixel_raw_data.append("nop")
-                        color_raw_data.append("")
-                elif self._color_mode == "pixel_custom":
-                    if pixel_data[index] != "nop":
-                        if color_data[index] == " ":
-                            pixel_raw_data.append(str(pixel_data[index]))
-                            color_raw_data.append("")
-                        else:
-                            pixel_raw_data.append(str(pixel_data[index]))
-                            color_raw_data.append(color_data[index])
-                    else:
-                        pixel_raw_data.append("nop")
-                        color_raw_data.append("")
-        return (pixel_raw_data, color_raw_data)   
-'''
-
 sprites = [] # Internal list that holds a reference to all the sprites that are created, used to update animations via the rendering pipeline
 
 class Sprite:
@@ -146,11 +37,10 @@ class Sprite:
     current_animation: str = None #The name of the current animation being played
     current_frame: int = -1 #The index of the current frame being displayed
     loop: bool = False #Whether the animation should loop or not
-    color_palette: list = ["empty"] #List containing the color palette of the sprite, each color declared as a hex value in the list, index 0 can be anything, it is treated as nothing anyway
+    color_palette: list = [(0,0,0)] #List containing the color palette of the sprite, each color declared as a 3 value tuple, where each value goes from 0 to 255, being RGB values for colors
     sprite_data: list = [] #List containing the raw "pixel" data of the sprite, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
     sprite_index: int = 0 #The index of the current sprite being displayed, used for internal engiine shenanigans, do not touch this unless you know what you are doing
-    coordinates: Tuple[int, int] = (0, 0) #The coordinates of the sprite on the screen, used for internal engine rendering, modify to move the sprite
-
+    
     def __init__(self, sprite_data_file: str):
         '''
         Base graphical class, used to create sprites and animated sprites for the game engine
@@ -190,7 +80,10 @@ class Sprite:
                         anim_name, anim_data = line.split(':')
                         self.animations[anim_name] = list(anim_data.split(','))
                     elif block_type == 'color_palette':
-                        self.color_palette.append(line.split(','))
+                        color = []
+                        for x in line.split(','):
+                            color.append(int(x))
+                        self.color_palette.append(tuple(color))
                     elif block_type == 'sprite_data':
                         frame.append(line)
                         frame_line += 1
@@ -222,7 +115,7 @@ class Sprite:
             EngineLogger.log("ERROR", f"Animation {animation_name} not found in sprite {self.sprite_data_file}")
             return
         self.current_animation = animation_name
-        self.current_frame = 0
+        self.current_frame = self.animations[animation_name][0]
         self.loop = loop
 
     def _update_animation(self):
@@ -234,12 +127,75 @@ class Sprite:
             return
         anim_frames = self.animations[self.current_animation]
         self.current_frame += 1
-        if self.current_frame >= len(anim_frames):
+        if self.current_frame >= anim_frames[-1]:
             if self.loop:
-                self.current_frame = 0
+                self.current_frame = anim_frames[0]
             else:
-                self.current_frame = len(anim_frames) - 1
+                self.current_frame = anim_frames[-1]
 
+class TileMap:
+    '''
+    Class used to draw tiles to the screen in a grid mannner. The tilemap is a 2D array of tiles, each tile is part of a file that contains the tile data and usable color pallettes for the tile map.
+    '''
+
+    tilemap_file = None #Reference to a file containing all the data of the tilemap
+    tile_size: Tuple[int, int] = (0, 0) #Width and height of each tile in the tilemap
+    tilemap_data: list = [] #List containing the raw "pixel" data of the tilemap, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
+    color_pallettes: list = [] #List containing the color pallettes of the tilemap, each pallette is a list of 3 value tuples, where each value goes from 0 to 255, being RGB values for colors
+    x_offset: int = 0 #The x offset of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
+    y_offset: int = 0 #The y offset of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
+
+    def __init__(self, tilemap_file: str):
+        '''
+        Class used to draw tiles to the screen in a grid mannner. The tilemap is a 2D array of tiles, each tile is part of a file that contains the tile data and usable color pallettes for the tile map.
+        '''
+        self.tilemap_file = tilemap_file
+        self._load_data()
+
+    def _load_data(self):
+        '''
+        INTERNAL METHOD - DO NOT CALL DIRECTLY\n
+        Loads the tilemap data from the tilemap_file and fills the class attributes with the corresponding data
+        
+        ---
+        Pending: 
+        - Make tilemap editor gui program to make tilemap editing easier, and make tilemap data consistent and easy to read/write
+        '''
+        with open(self.tilemap_file, 'r') as f:
+            reading_block = False
+            block_type = ''
+            tile = []
+            tile_line = 0
+            for line in f:
+                line = line.strip()
+                if line.startswith('[') and line.endswith(']'):
+                    reading_block = True
+                    block_type = line[1:-1]
+                elif reading_block:
+                    if line == '[block_end]':
+                        reading_block = False
+                        block_type = ''
+                    elif block_type == 'dimensions':
+                        self.dimensions = tuple(line.split(','))
+                    elif block_type == 'color_palettes':
+                        color = []
+                        for y in line.split(';'):
+                            for x in y.split(','):
+                                color.append(int(x))
+                        self.color_pallettes.append(tuple(color))
+                    elif block_type == 'tile_data':
+                        tile.append(line)
+                        tile_line += 1
+                        if tile_line == self.dimensions[1]:
+                            self.tilemap_data.append(tile)
+                            tile = []
+                            tile_line = 0
+                    else:
+                        EngineLogger.log("ERROR", f"Unknown block type: {block_type}")
+                        reading_block = False
+                        block_type = ''        
+
+'''
 class Screen:
     """
     Class that manages everything related to graphic rendering
@@ -443,6 +399,17 @@ class Screen:
             screen_print += "\n\033[0m"
         sys.stdout.write("\033[2J\033[H\n" + screen_print)
         sys.stdout.flush()
+'''
+
+class Screen:
+    '''
+    Class that manages the graphics rendering of the game engine. Handles basic drawing of different graphic types, as well as prosessing the layers and putting everythin togheter to output the images.
+    '''
+
+    dimensions: Tuple[int, int] = (0, 0) #The dimensions of the screen, used for internal engine rendering, modify to change the size of the screen
+    layer_count: int = 0 #The number of layers the screen has, used for internal engine rendering, modify to change the number of layers
+    video_memory: list = [] #The video memory of the screen, used for internal engine rendering. Do not modify this directly, use the provided methods to draw on the screen
+    loaded_color_palette: list = [] #The color palette currently in use by the screen, gets updated by itself when anything is drawn to the screen. Do not modify on it's own unless aware of what you doing
 
 default_keymap = {"up"          : pynput.keyboard.Key.up, 
                   "down"        : pynput.keyboard.Key.down,
