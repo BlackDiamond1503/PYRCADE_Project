@@ -4,7 +4,6 @@ from copy import deepcopy
 from tcolors import TrueColor, BgTrueColor, Mod
 
 DEBUG = True
-log_filename = ""
 
 class Logger:
 
@@ -18,8 +17,13 @@ class Logger:
             self.logfile = open(f'/logs/{timestamp}.log', 'a', encoding = 'utf-8')
 
     def log(self, type: Literal['ENGINE', 'INFO', 'WARN', 'ERROR'], message = 'undefined log message'):
-        timestamp = datetime.datetime.now().strftime(f'[%d-%m-%Y] [%H:%M:%S]')
+        timestamp = datetime.datetime.now().strftime(f'[%d-%m-%Y %H:%M:%S]')
+        if not DEBUG and type == 'ENGINE':
+            return
         self.logfile.write(f"{timestamp} [{type}] {message}\n")
+
+EngineLogger = Logger()
+
 '''
 class Sprite:
     """
@@ -130,6 +134,8 @@ class Sprite:
         return (pixel_raw_data, color_raw_data)   
 '''
 
+sprites = [] # Internal list that holds a reference to all the sprites that are created, used to update animations via the rendering pipeline
+
 class Sprite:
     '''
     Base graphical class, used to create sprites and animated sprites for the game engine
@@ -137,17 +143,23 @@ class Sprite:
     sprite_data_file = None #Reference to a file containing all the data of the sprite
     dimensions: Tuple[int, int] = (0, 0) #Width and height of the sprite
     animations: dict = {} #Dictionary containing all the animation data of the sprite
-    current_animation: int = -1 #The index of the current animation being played
+    current_animation: str = None #The name of the current animation being played
     current_frame: int = -1 #The index of the current frame being displayed
     loop: bool = False #Whether the animation should loop or not
-    color_palette: list = ["#00000000"] #List containing the color palette of the sprite, each color declared as a hex value in the list, index 0 must be transparent (transparent pixels, even is semi transparent, are gonna be represented as no pixel, so the engine will not draw them, and will draw the pixel in the layer behind it instead)
+    color_palette: list = ["empty"] #List containing the color palette of the sprite, each color declared as a hex value in the list, index 0 can be anything, it is treated as nothing anyway
     sprite_data: list = [] #List containing the raw "pixel" data of the sprite, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
+    sprite_index: int = 0 #The index of the current sprite being displayed, used for internal engiine shenanigans, do not touch this unless you know what you are doing
+    coordinates: Tuple[int, int] = (0, 0) #The coordinates of the sprite on the screen, used for internal engine rendering, modify to move the sprite
 
     def __init__(self, sprite_data_file: str):
         '''
         Base graphical class, used to create sprites and animated sprites for the game engine
         '''
         self.sprite_data_file = sprite_data_file
+        global sprites
+        sprites.append(self)
+        self.sprite_index = len(sprites) - 1
+        self._load_data()
 
     def _load_data(self):
         '''
@@ -155,12 +167,14 @@ class Sprite:
         Loads the sprite data from the sprite_data_file and fills the class attributes with the corresponding data
         
         ---
-        Pending: Make sprite editor gui program to make sprite editing easier, and make sprite data consistent and easy to read/write
+        Pending: 
+        - Make sprite editor gui program to make sprite editing easier, and make sprite data consistent and easy to read/write
         '''
         with open(self.sprite_data_file, 'r') as f:
             reading_block = False
             block_type = ''
             frame = []
+            frame_line = 0
             for line in f:
                 line = line.strip()
                 if line.startswith('[') and line.endswith(']'):
@@ -168,9 +182,6 @@ class Sprite:
                     block_type = line[1:-1]
                 elif reading_block:
                     if line == '[block_end]':
-                        if block_type == 'sprite_data':
-                            self.sprite_data.append(frame)
-                            frame = []
                         reading_block = False
                         block_type = ''
                     elif block_type == 'dimensions':
@@ -182,8 +193,52 @@ class Sprite:
                         self.color_palette.append(line.split(','))
                     elif block_type == 'sprite_data':
                         frame.append(line)
-                    
-                        
+                        frame_line += 1
+                        if frame_line == self.dimensions[1]:
+                            self.sprite_data.append(frame)
+                            frame = []
+                            frame_line = 0
+                    else:
+                        EngineLogger.log("ERROR", f"Unknown block type: {block_type}")
+                        reading_block = False
+                        block_type = ''
+
+    def set_frame(self, frame_index: int):
+        '''
+        Sets the current frame of the sprite to the specified index
+        '''
+        if frame_index < 0 or frame_index >= len(self.sprite_data):
+            EngineLogger.log("ERROR", f"Frame index {frame_index} out of bounds for sprite {self.sprite_data_file}")
+            return
+        self.current_frame = frame_index
+        self.current_animation = None
+        self.loop = False
+
+    def play_animation(self, animation_name: str, loop: bool = False):
+        '''
+        Plays the specified animation by name, if it exists in the animations dictionary
+        '''
+        if animation_name not in self.animations:
+            EngineLogger.log("ERROR", f"Animation {animation_name} not found in sprite {self.sprite_data_file}")
+            return
+        self.current_animation = animation_name
+        self.current_frame = 0
+        self.loop = loop
+
+    def _update_animation(self):
+        '''
+        INTERNAL METHOD - DO NOT CALL DIRECTLY\n
+        Updates the current frame of the animation if an animation is playing, only called by the rendering pipeline of the internal engine itself.
+        '''
+        if self.current_animation is None:
+            return
+        anim_frames = self.animations[self.current_animation]
+        self.current_frame += 1
+        if self.current_frame >= len(anim_frames):
+            if self.loop:
+                self.current_frame = 0
+            else:
+                self.current_frame = len(anim_frames) - 1
 
 class Screen:
     """
