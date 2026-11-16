@@ -3,6 +3,7 @@ from typing import Literal, Tuple
 from copy import deepcopy
 from tcolors import TrueColor, BgTrueColor, Mod
 from PIL import Image, ImageDraw
+from pathlib import Path
 
 DEBUG = True
 
@@ -11,19 +12,20 @@ class Logger:
     logfile = None
 
     def __init__(self): # Initialize logger so we can log stuff
-        if self.logfile_path == '':
-            if not os.path.exists('/logs'):
-                os.makedirs('/logs')
-            timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H-%M")
-            self.logfile = open(f'/logs/{timestamp}.log', 'a', encoding = 'utf-8')
+        logger_path = Path(__file__).parent / 'logs'
+        logger_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H-%M-%S")
+        self.logfile = open(logger_path / f'{timestamp}.log', 'a', encoding = 'utf-8')
 
     def log(self, type: Literal['ENGINE', 'INFO', 'WARN', 'ERROR'], message = 'undefined log message'):
         timestamp = datetime.datetime.now().strftime(f'[%d-%m-%Y %H:%M:%S]')
         if not DEBUG and type == 'ENGINE':
             return
         self.logfile.write(f"{timestamp} [{type}] {message}\n")
+        self.logfile.flush()
 
 EngineLogger = Logger()
+EngineLogger.log("ENGINE", "Engine logger initialized")
 
 sprites = [] # Internal list that holds a reference to all the sprites that are created, used to update animations via the rendering pipeline
 
@@ -92,7 +94,7 @@ class Sprite:
                             frame = []
                             frame_line = 0
                     else:
-                        EngineLogger.log("ERROR", f"Unknown block type: {block_type}")
+                        EngineLogger.log("ERROR", f"Unknown block type in sprite data: {block_type}")
                         reading_block = False
                         block_type = ''
 
@@ -191,7 +193,7 @@ class TileMap:
                             tile = []
                             tile_line = 0
                     else:
-                        EngineLogger.log("ERROR", f"Unknown block type: {block_type}")
+                        EngineLogger.log("ERROR", f"Unknown block type on tile data: {block_type}")
                         reading_block = False
                         block_type = ''        
 
