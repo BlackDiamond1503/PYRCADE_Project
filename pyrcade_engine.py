@@ -1,8 +1,8 @@
-import sys, pynput, random, datetime, os, tkinter
+import sys, pynput, random, datetime, os, tkinter, time
 from typing import Literal, Tuple
 from copy import deepcopy
 from tcolors import TrueColor, BgTrueColor, Mod
-from PIL import Image, ImageDraw
+from PIL import Image, ImageTk
 from pathlib import Path
 
 DEBUG = True
@@ -222,213 +222,6 @@ class GridMap:
         row = self.gridmap[y]
         self.gridmap[y] = row[:x] + tile_index + color_palette_index + row[x+2:]
 
-    
-'''
-class Screen:
-    """
-    Class that manages everything related to graphic rendering
-    Arguments:
-        height:     The height of the screen in characters
-        width:      The width of the screen in characters
-    """
-    def __init__(self, height: int, width: int):
-        """
-        Class that manages everything related to graphic rendering
-        Arguments:
-            height:     The height of the screen in characters
-            width:      The width of the screen in characters
-        """
-        self.height = height
-        self.width = width
-        self._screen = []
-        self.pixel_layers = []
-        self.color_layers = []
-        self.pixel_blank = []
-        self.color_blank = []
-
-    def create_text(self, x: int, y: int, layer: int, text_data: Tuple[str, str, str]):
-        """
-        Creates a text element on the screen.
-        Arguments:
-            x:          The x position to start drawing the text.
-            y:          The y position to start drawing the text.
-            layer:      The layer to draw the text on.
-            text_data:  A tuple containing the text string, foreground color code, and background color code.
-        """
-        text, fg, bg = text_data
-        workvar = ""
-        text_pixel_data = []
-        for character in text:
-            workvar += character
-            if len(workvar) == 3:
-                text_pixel_data.append(workvar)
-                workvar = ""
-        for pixel in text_pixel_data:
-            if layer != 0:
-                if (0 <= x < self.width) and (0 <= y < self.height) and bg != "":
-                    self.pixel_layers[y][x][layer] = f"{pixel}"
-                    self.color_layers[y][x][layer] = f"{bg}{fg}"
-                elif (0 <= x < self.width) and (0 <= y < self.height) and bg == "":
-                    self.pixel_layers[y][x][layer] = f"{pixel}"
-                    self.color_layers[y][x][layer] = f"{fg}"
-                else:
-                    continue
-            x += 1
-
-    def create_sprite(self, x: int, y: int, layer: int, sprite_data_raw: tuple, sprite_num: int = 0, Sprite: Sprite = None):
-        """
-        Creates a sprite element on the screen.
-        Arguments:
-            x:                  The x position to start drawing the sprite.
-            y:                  The y position to start drawing the sprite.
-            layer:              The layer to draw the sprite on.
-            sprite_data_raw:    A tuple containing the raw pixel and color data of the sprite.
-            sprite_num:         The frame number of the sprite to draw (for multi-frame sprites).
-            Sprite:             The Sprite object containing the sprite's properties.
-        """
-        sprite_data = sprite_data_raw
-        offset = (Sprite.height * Sprite.width) * sprite_num
-        if sprite_data == None or Sprite == None:
-            return
-        pixel_write_data, color_write_data = sprite_data
-        for row in range(Sprite.height):
-            for column in range(Sprite.width):
-                if (layer != 0) and ((0 <= x + column < self.width) and (0 <= y + row < self.height)):
-                    if pixel_write_data[offset + (row * Sprite.width) + column] != "nop":
-                        self.pixel_layers[y + row][x + column][layer] = pixel_write_data[offset + (row * Sprite.width) + column]
-                        self.color_layers[y + row][x + column][layer] = color_write_data[offset + (row * Sprite.width) + column]
-                    elif self.pixel_layers[y + row][x + column][layer] == "nop":
-                        self.pixel_layers[y + row][x + column][layer] = "nop"
-                        self.color_layers[y + row][x + column][layer] = "nop"
-
-    def create_pixel(self, x: int, y: int, layer: int, pixel_data: Tuple[str, str, str]):
-        """
-        Creates a pixel element on the screen.
-        Arguments:
-            x:          The x position to draw the pixel.
-            y:          The y position to draw the pixel.
-            layer:      The layer to draw the pixel on.
-            pixel_data: A tuple containing the pixel string, foreground color code, and background color code.
-        """
-        if x < 0 or x >= self.width or y < 0 or y >= self.height:
-            return
-        px, fg, bg = pixel_data
-        if layer != 0:
-            if bg != "":
-                self.pixel_layers[y][x][layer] = f"{px}"
-                self.color_layers[y][x][layer] = f"{bg}{fg}"
-            else:
-                self.pixel_layers[y][x][layer] = f"{px}"
-                self.color_layers[y][x][layer] = f"{fg}"
-    
-    def set_bg(self, initx: int, inity: int, finx: int, finy: int, color: str):
-        """
-        Sets the background color for a specified area of the screen.
-        Arguments:
-            initx:  The initial x position of the area.
-            inity:  The initial y position of the area.
-            finx:   The final x position of the area.
-            finy:   The final y position of the area.
-            color:  The background color code to set.
-        """
-        sizex = finx - initx
-        sizey = finy - inity
-        for row in range(sizey):
-            for column in range(sizex):
-                if not(column + initx < 0 or column + initx >= self.width or row + inity < 0 or row + inity >= self.height):
-                    self.color_layers[row + inity][column + initx][0] = f"{color}"
-
-    def initialize(self, layers: int, bg_color: str):
-        """
-        Initializes the screen with the specified number of layers and background color.
-        Arguments:
-            layers:    The number of layers to create.
-            bg_color:  The background color code to use.
-        """
-        self._layers = layers
-        self._bg_color = bg_color
-        worklist = []
-        for height_line in range(self.height):
-            worklist.append([])
-            for width_line in range(self.width):
-                worklist[height_line].append([])
-                for layer in range(self._layers):
-                    worklist[height_line][width_line].append("nop")
-        self.pixel_blank = worklist 
-        worklist = []
-        for height_line in range(self.height):
-            worklist.append([])
-            for width_line in range(self.width):
-                worklist[height_line].append([])
-                for layer in range(self._layers):
-                    if layer == 0:
-                        worklist[height_line][width_line].append(self._bg_color)
-                    else:
-                        worklist[height_line][width_line].append("")
-        self.color_blank = worklist 
-
-    def memory_reset(self):
-        """
-        Resets the screen memory to the blank state.
-        """
-        self.pixel_layers = deepcopy(self.pixel_blank)
-        self.color_layers = deepcopy(self.color_blank)
-
-    def bake_screen(self):
-        """
-        Bakes the current screen state into a final renderable format.
-        """
-        final_bake = []
-        for height_line in range(self.height):
-            final_bake.append([])
-            pixel_bake = []
-            color_bake = []
-            layered_pixel = ""
-            layered_color = ""
-            for width_line in range(self.width):
-                bg = False
-                pixel = "   "
-                fgcolor = "nop"
-                bgcolor = self.color_layers[height_line][width_line][0]
-                layered_pixel = self.pixel_layers[height_line][width_line]
-                layered_color = self.color_layers[height_line][width_line]
-                reversed_pixel_layers = reversed(layered_pixel)
-                reversed_color_layers = reversed(layered_color)
-                for pixel_layer, color_layer in zip(reversed_pixel_layers, reversed_color_layers):
-                    if not bg:
-                        if pixel_layer != "nop":
-                            pixel = pixel_layer
-                            fgcolor = color_layer
-                            bg = True
-                        else:
-                            pixel = "   "
-                            fgcolor = ""
-                    else:
-                        if pixel_layer != "nop":
-                            bgcolor = color_layer
-                            break
-                        else:
-                            bgcolor = ""
-                pixel_bake.append(pixel)
-                color_bake.append(bgcolor + fgcolor)
-            #log("debug", f"color bake: {color_bake}\n pixel bake: {pixel_bake}")
-            for item in range(len(pixel_bake)):
-                final_bake[height_line].append(color_bake[item] + pixel_bake[item] + "\033[0m")
-        self._screen = final_bake
-    
-    def print_screen(self):
-        """
-        Prints the baked screen to the terminal.
-        """
-        screen_print = ""
-        for height_line in self._screen:
-            for width_line in height_line:
-                screen_print += width_line
-            screen_print += "\n\033[0m"
-        sys.stdout.write("\033[2J\033[H\n" + screen_print)
-        sys.stdout.flush()
-'''
-
 class Screen:
     '''
     Class that manages the graphics rendering of the game engine. Handles basic drawing of different graphic types, as well as prosessing the layers and putting everythin togheter to output the images.
@@ -451,7 +244,6 @@ class Screen:
         self.video_memory = []
         for layer in range(self.layer_count):
             self.video_memory.append([])
-            self.final_frame_preprocess.append([])
             for y in range(self.dimensions[1]):
                 self.video_memory[layer].append([])
                 self.final_frame_preprocess[layer].append([])
@@ -562,61 +354,65 @@ class Screen:
                 for x in range(self.dimensions[0]):
                     pixel = self.video_memory[layer][y][x]
                     if pixel[3] > 0: # If alpha > 0
-                        self.final_frame_preprocess.append((x, y, pixel))
-    
+                        self.final_frame_preprocess[y][x] = pixel
+        for y in range(self.dimensions[1]):
+            for x in range(self.dimensions[0]):
+                self.final_frame.putpixel((x, y), self.final_frame_preprocess[y][x])
 
+class GameWindow:
+    def __init__(self, game_name: str = 'Pyrcade Game'):
+        self.root = tkinter.Tk()
+        self.game_mainloop: callable #The game's mainloop as a callable to urn it when needed
+        self.screen: Screen #The game's screen object, so it can be controlled inside the ui mainloop
+        self.frame_wait: int
+        self.last_time = time.perf_counter() #Time refence to check framerate and frametimes
+        self.held_keys = set() #set of held keys at the moment
 
+        self.canvas = tkinter.Canvas(self.root, highlightthickness = 0)
+        self.canvas.pack(fill = 'both', expand = True)
+        self.image_id = self.canvas.create_image(0, 0)
 
+        self.root.bind('<KeyPress>', self._key_down)
+        self.root.bind('<KeyRealease>', self._key_up)
+        self.root.bind('<FocusOut>', self._clear_keys)
+        self.root.protocol('WN_DELETE_WINDOW', self.root.destroy)
+        self.game_name = game_name
 
-default_keymap = {"up"          : pynput.keyboard.Key.up, 
-                  "down"        : pynput.keyboard.Key.down,
-                  "left"        : pynput.keyboard.Key.left,
-                  "right"       : pynput.keyboard.Key.right,
-                  "space"       : pynput.keyboard.Key.space,
-                  "esc"         : pynput.keyboard.Key.esc,
-                  "enter"       : pynput.keyboard.Key.enter,
-                  "backspace"   : pynput.keyboard.Key.backspace}
+        self.fps_frames = 0
+        self.fps_started = time.perf_counter()
 
-class Game:
-    def __init__(self, Screen: Screen, key_map: dict = default_keymap):
-        """
-        Class that represents an arcade machine.
-        Arguments:
-            arcade_name:    The name of the arcade machine.
-            Screen:         The Screen object to use for rendering.
-            type:           The type of arcade machine ("python_game" or "pyrcade_script_game").
-            mode:           The mode of the arcade machine ("Terminal" or "Windowed").
-            key_map:       A dictionary mapping input keys to pynput keyboard keys.
-        """
-        self._screen = Screen
-        self.input = ""
-        self._key_map = key_map
-        self._engine_ver = "1.0.2"
+    def _key_down(self, event):
+        self.held_keys.add(event.keysym)
 
-    def start_game(self, game_code = None):
-        """
-        Starts the arcade machine with the provided game code function.
-        Arguments:
-            game_code: The game code function to run. MUST BE A FUNCTION THAT TAKES NO ARGUMENTS.
-        """
-        game_code()
-        
-    def start_input(self, keys: list = ["up", "down", "left", "right", "space", "esc"]):
-        """
-        MUST RUN BEFORE STARTING THE ARCADE MACHINE!\n
-        Starts the input listener for the arcade machine.
-        Arguments:
-            keys: A list of keys to listen for.
-        """
-        self._actual_inputs = set()
-        self._keys = keys
-        def input_listener_press(keypressed):
-            for key in self._keys:
-                if self._key_map[key] == keypressed:
-                    self._actual_inputs.add(key)
-        def input_listener_release(keyrelease):
-            for key in self._keys:
-                if self._key_map[key] == keyrelease:
-                    self._actual_inputs.discard(key)
-        listener = pynput.keyboard.Listener(on_press = input_listener_press, on_release = input_listener_release)
-        listener.start()
+    def _key_up(self, event):
+        self.held_keys.discard(event.keysym)
+
+    def _clear_keys(self, event):
+        self.held_keys.clear()
+
+    def _frame(self):
+        self.fps_frames += 1
+        now = time.perf_counter()
+        elapsed = now - self.fps_started
+
+        if elapsed >= 1.0:
+            fps = self.fps_frames / elapsed
+            self.root.title(f"My Game | {fps:.1f} FPS")
+            self.fps_frames = 0
+            self.fps_started = now
+
+        now = time.perf_counter()
+        delta = min(now - self.last_time, 0.1)
+        self.last_time = now
+
+        self.game_mainloop(delta, self.held_keys)
+
+        self.screen.render()
+        self.photo = ImageTk.PhotoImage(self.screen.final_frame)
+        self.canvas.itemconfigure(self.image_id, image = self.photo)
+
+        self.root.after(self.frame_wait, self._frame)
+
+    def start(self):
+        self.root.after(0, self._frame)
+        self.root.mainloop()
