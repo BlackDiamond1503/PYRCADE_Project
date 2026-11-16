@@ -1,10 +1,10 @@
 import time, sys, pynput, random, datetime, threading, os, string
 from typing import Literal, Tuple
 from copy import deepcopy
-import customtkinter as ctk
 
 DEBUG = True
 log_filename = ""
+'''
 def log(level: Literal["initial", "system", "warning", "info", "error", "arcade", "debug"] , message = None):
     """
     Logs a messeage to the log file with a timestamp and a type for debugging.
@@ -39,9 +39,18 @@ def log(level: Literal["initial", "system", "warning", "info", "error", "arcade"
     else:  
         return
     log_filename = f"logs/pyrcade_log_{initial_datetime}.txt"
-        
-log("system", "logging system initialized")
-log("system", "pyrcade engine initializing...")
+'''
+
+class Logger:
+
+    logfile = None
+
+    def __init__(self):
+        if self.logfile_path == '':
+            if not os.path.exists('/logs'):
+                os.makedirs('/logs')
+            
+
 
 class ColorManager:
     """
@@ -60,8 +69,6 @@ class ColorManager:
     
     def bg(self, code):
         return f"\u001b[48;5;{code}m"
-
-log("system", "loading color manager")
 
 color = ColorManager()
 
@@ -581,154 +588,6 @@ class Screen:
         sys.stdout.write("\033[2J\033[H\n" + screen_print)
         sys.stdout.flush()
 
-class CTkScreen:
-    """
-    Class that manages a CustomTkinter window for graphical rendering.
-    Arguments:
-        width:          The width of the window in characters.
-        height:         The height of the window in characters.
-        pixel_size:    The size of each pixel in the window.
-        core_screen:    The Screen object to render in the window.
-    """
-    def __init__(self, width: int = 10, height: int = 10, pixel_size: int = 20, core_screen: Screen = None):
-        """
-        Class that manages a CustomTkinter window for graphical rendering.
-        Arguments:
-            width:          The width of the window in characters.
-            height:         The height of the window in characters.
-            pixel_size:    The size of each pixel in the window.
-            core_screen:    The Screen object to render in the window.
-        """
-        self.root = None
-        self.width = width
-        self.height = height
-        self.font_size = pixel_size
-        self.pixels = []
-        self.thread = None
-        self.running = False
-        if core_screen != None:
-            self.core_screen = core_screen
-        else:
-            raise Exception("CTkScreen error! - core_screen cannot be None")
-    
-    def _full_update(self):
-        if self.running:
-            self._needs_full_update = True
-
-    def _initialize_window(self, game_title):
-        """
-        NOT FOR PUBLIC USE\n
-        Initializes the CustomTkinter window and its pixel grid.
-        """
-        self.root = ctk.CTk()
-        self.font = ctk.CTkFont(family = "Consolas", size = self.font_size, weight = "bold")
-        self.root.title(game_title)
-        self.root.resizable(False, False)
-        self.root.protocol("WM_DELETE_WINDOW", self._close)
-        self.pixel_space = ctk.CTkFrame(self.root, fg_color = "#000000")
-        for i in range(self.width):
-            self.pixel_space.grid_columnconfigure(i, weight = 1, minsize = 1)
-        for i in range(self.height):    
-            self.pixel_space.grid_rowconfigure(i, weight = 1, minsize = 1, pad = 0)
-        for row in range(self.height):
-            self.pixels.append([])
-            for column in range(self.width):
-                pixel = ctk.CTkLabel(self.pixel_space, bg_color = "#000000", font = self.font, text = "   ", corner_radius = 0)
-                pixel.configure(padx = 0, pady = 0)
-                pixel.grid(row = row, column = column, padx = 0, pady = 0)
-                self.pixels[row].append(pixel)
-        self.pixel_space.pack(padx = 0, pady = 0)
-    
-    def _start_window(self, game_title: str = "PYRcade Engine Window"):
-        """
-        NOT FOR PUBLIC USE\n
-        Starts the CustomTkinter window in a separate thread.
-        """
-        self.running = True
-        try:
-            self._initialize_window(game_title = game_title)
-            self.running = True
-            self.root.mainloop()
-            log("system", "CTk window closed.")
-        except Exception as e:
-            log("error", f"Error initializing window: {e}")
-            self.running = False
-            self._close()
-            return
-        finally:
-            self.running = False
-            log("system", "CTk window closed.")
-
-    def _close(self):
-        """
-        NOT FOR PUBLIC USE\n
-        Closes the CustomTkinter window and stops the thread.
-        """
-        if self.running:
-            self.running = False
-            self.root.quit()
-            self.root.destroy()
-            log("system", "CTk thread stopped.")
-
-    def start(self):
-        """
-        Starts the CTk window thread.
-        """
-        if self.thread is None:
-            log("system", "starting CTk window thread...")
-            self.thread = threading.Thread(target = self._start_window, daemon = True)
-            self.thread.start()
-            self.running = True
-            log("system", "CTk window thread started.")
-        else:
-            log("warning", "CTk window thread already running!")
-    
-    def _do_update(self):
-        """
-        NOT FOR PUBLIC USE\n
-        NOT THREAD SAFE\n
-        Updates the CTk window with the current screen data.
-        """
-
-        bg = False
-        if self.running:
-            for row in range(self.height):
-                for column in range(self.width):
-                    layered_pixel = self.core_screen.pixel_layers[row][column]
-                    layered_color = self.core_screen.color_layers[row][column]
-                    reversed_pixel_layers = reversed(layered_pixel)
-                    reversed_color_layers = reversed(layered_color)
-                    pixel_data = "   "
-                    pixel_color = "#ffffff"
-                    pixel_bg = ANSII_to_HEX(layered_color[0])
-                    bg = False
-                    for pixel_layer, color_layer in zip(reversed_pixel_layers, reversed_color_layers):
-                        if pixel_layer != "nop" and not bg:
-                            pixel_data = pixel_layer
-                            if color_layer != "":
-                                pixel_color = ANSII_to_HEX(color_layer)
-                            bg = True
-                        elif pixel_layer != "nop" and bg:
-                            if color_layer != "":
-                                pixel_bg = ANSII_to_HEX(color_layer)
-                                break
-                            else:
-                                continue
-                    previus_pixel = self.pixels[row][column].cget("text")
-                    previus_color = self.pixels[row][column].cget("text_color")
-                    previus_background = self.pixels[row][column].cget("fg_color")
-                    if previus_pixel != pixel_data or previus_color != pixel_color or previus_background != pixel_bg:
-                        self.pixels[row][column].configure(text = pixel_data, text_color = pixel_color, fg_color = pixel_bg)
-                    else:
-                        continue
-
-    def update(self):
-        """
-        Updates the CTk window with the current screen data in a thread-safe manner.
-        """
-        if self.running and self.root:
-            self.root.after_idle(self._do_update)
-
 default_keymap = {"up"          : pynput.keyboard.Key.up, 
                   "down"        : pynput.keyboard.Key.down,
                   "left"        : pynput.keyboard.Key.left,
@@ -738,8 +597,8 @@ default_keymap = {"up"          : pynput.keyboard.Key.up,
                   "enter"       : pynput.keyboard.Key.enter,
                   "backspace"   : pynput.keyboard.Key.backspace}
 
-class Arcade:
-    def __init__(self, arcade_name: str, Screen: Screen, type: Literal["python_game", "pyrcade_script_game"], mode: Literal["Terminal", "Windowed"] = "Terminal", key_map: dict = default_keymap):
+class Game:
+    def __init__(self, Screen: Screen, key_map: dict = default_keymap):
         """
         Class that represents an arcade machine.
         Arguments:
@@ -749,45 +608,20 @@ class Arcade:
             mode:           The mode of the arcade machine ("Terminal" or "Windowed").
             key_map:       A dictionary mapping input keys to pynput keyboard keys.
         """
-        self.arcade_name = arcade_name
         self._screen = Screen
-        self._type = type
-        self._mode = mode
         self.input = ""
         self._key_map = key_map
-        self._engine_ver = "1.0.1"
+        self._engine_ver = "1.0.2"
 
-    def start_machine(self, game_code = None):
+    def start_game(self, game_code = None):
         """
         Starts the arcade machine with the provided game code function.
         Arguments:
             game_code: The game code function to run. MUST BE A FUNCTION THAT TAKES NO ARGUMENTS.
         """
-        self.window_manager = CTkScreen(width = self._screen.width, height = self._screen.height, pixel_size = 20, core_screen = self._screen)
-        self.window_manager.start()
-        if self._mode == "Terminal":
-            if self._type == "python_game":
-                log("Arcade", f"starting Arcade machine {self.arcade_name}...\n    Arcade info:\n    name: {self.arcade_name}\n    type: {self._type}")
-                sys.stdout.write("\033[2J\033[H")
-                sys.stdout.flush()
-                game_code()
-        elif self._mode == "Windowed":
-            if self._type == "python_game" and game_code:
-                log("Arcade", f"starting Arcade machine {self.arcade_name} in Windowed mode...\n    Arcade info:\n    name: {self.arcade_name}\n    type: {self._type}\n    mode: {self._mode}")
-                time.sleep(0.5) 
-
-                self.game_thread = threading.Thread(target=game_code, daemon=True)
-                self.game_thread.start()
-                log("Arcade", "Game logic thread started.")
-                
-                while self.window_manager.running:
-                    time.sleep(0.1)
-                
-                log("Arcade", "Window closed. Exiting machine.")
-            
-            else:
-                log("error", "Cannot start Windowed mode: game_code not provided or type is incorrect.")
-    
+        log("Engine", f"srunning game code...\n")
+        game_code()
+        
     def start_input(self, keys: list = ["up", "down", "left", "right", "space", "esc"]):
         """
         MUST RUN BEFORE STARTING THE ARCADE MACHINE!\n
@@ -795,10 +629,9 @@ class Arcade:
         Arguments:
             keys: A list of keys to listen for.
         """
-        log("Arcade", f"Arcade {self.arcade_name} started input listener")
+        log("Engine", f"engine input listener initialized")
         self._actual_inputs = set()
         self._keys = keys
-        self._input_events_buffer = []
         def input_listener_press(keypressed):
             for key in self._keys:
                 if self._key_map[key] == keypressed:
