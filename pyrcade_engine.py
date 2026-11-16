@@ -1,131 +1,25 @@
 import time, sys, pynput, random, datetime, threading, os, string
 from typing import Literal, Tuple
 from copy import deepcopy
+from tcolors import TrueColor, BgTrueColor, Mod
 
 DEBUG = True
 log_filename = ""
-'''
-def log(level: Literal["initial", "system", "warning", "info", "error", "arcade", "debug"] , message = None):
-    """
-    Logs a messeage to the log file with a timestamp and a type for debugging.
-
-    Arguments:
-        level:      The level of the log message, only for organizational purposes.
-        message:    The message to log, useful for debugging.
-    """
-    
-    if not DEBUG:
-        return
-    try:
-        os.makedirs("logs", exist_ok=True)
-    except Exception as e:
-        print(f"[LOG ERROR] could not create logs directory: {e}")
-        return
-
-    global log_filename
-    timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H-%M-%S")
-    level_str = str(level).upper()
-    if message is not None:
-        log_message = f"[{timestamp}] [{level_str}] {message}\n"
-        try:
-            if log_filename == "":
-                log_filename = f"logs/pyrcade_log_{timestamp}.txt"
-            with open(log_filename, "a", encoding="utf-8") as log_file:
-                log_file.write(log_message)
-                return
-        except Exception as e:
-            print(f"[LOG ERROR] could not write to log file: {e}")
-            return
-    else:  
-        return
-    log_filename = f"logs/pyrcade_log_{initial_datetime}.txt"
-'''
 
 class Logger:
 
     logfile = None
 
-    def __init__(self):
+    def __init__(self): # Initialize logger so we can log stuff
         if self.logfile_path == '':
             if not os.path.exists('/logs'):
                 os.makedirs('/logs')
-            
+            timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H-%M")
+            self.logfile = open(f'/logs/{timestamp}.log', 'a', encoding = 'utf-8')
 
-
-class ColorManager:
-    """
-    Manages all the color codes for the engine.
-
-    Methods:
-    --------
-        fg(code):   Returns the ANSI escape code for the given foreground color code.
-        bg(code):   Returns the ANSI escape code for the given background color code.
-    """ 
-    def __init__(self):
-        pass
-    
-    def fg(self, code):
-        return f"\u001b[38;5;{code}m"
-    
-    def bg(self, code):
-        return f"\u001b[48;5;{code}m"
-
-color = ColorManager()
-
-preset_color_codes = {"k" : color.fg(0), 
-                      "K" : color.fg(8), 
-                      "r" : color.fg(1),
-                      "R" : color.fg(9),
-                      "g" : color.fg(2),
-                      "G" : color.fg(10),
-                      "y" : color.fg(3),
-                      "Y" : color.fg(11),
-                      "b" : color.fg(4),
-                      "B" : color.fg(12),
-                      "p" : color.fg(5),
-                      "P" : color.fg(13),
-                      "c" : color.fg(6),
-                      "C" : color.fg(14),
-                      "w" : color.fg(7),
-                      "W" : color.fg(15)}
-
-def ANSII_to_HEX(color_str: str):
-    """
-    NOT FOR PUBLIC USE\n
-    Converts a raw ANSI Escape Color code into a HEX color string
-
-    Arguments:
-        color_str:  The ANSI escape color code string to convert.
-    """
-    color_code = ""
-    for i in range(len(color_str) - 7):
-        if color_str[i + 7] == "m":
-            break
-        else:
-            color_code += color_str[i + 7]
-    if color_code == "":
-        return "#000000"
-    color_code = int(color_code)
-    if 0 <= color_code <= 15:
-        basic_colors = ["#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0",
-                        "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"]
-        return basic_colors[color_code]
-    elif 16 <= color_code <= 231:
-        coloridx = color_code - 16
-        r = coloridx // 36
-        gbidx = coloridx % 36
-        g = gbidx // 6
-        b = gbidx % 6
-        rgb_steps = ["00", "5f", "87", "af", "d7", "ff"]
-        hex_color = f"#{rgb_steps[r]}{rgb_steps[g]}{rgb_steps[b]}"
-        return hex_color
-    elif 232 <= color_code <= 255:
-        shades = ["08", "12", "1c", "26", "30", "3a", "44", "4e", "58", "62", "6c", "76", "80", "8a", "94", "9e", "a8", "b2", "bc", "c6", "d0", "da", "e4", "ee"]
-        grayidx = color_code - 232
-        shade = shades[grayidx]
-        hex_grey = f"#{shade}{shade}{shade}"
-        return hex_grey
-    return "#000000"
+    def log(self, type: Literal['ENGINE', 'INFO', 'WARN', 'ERROR'], message = 'undefined log message'):
+        timestamp = datetime.datetime.now().strftime(f'[%d-%m-%Y] [%H:%M:%S]')
+        self.logfile.write(f"{timestamp} [{type}] {message}\n")
 
 class Sprite:
     """
@@ -166,37 +60,21 @@ class Sprite:
 
         # data type validator
         if type(color_data) != list and color_mode == "pixel":
-            log("warning", f"empty color data detected; initializing default color data.\n    sprite_name: {name}\n    color_data_type: {type(color_data)}")
             color_data = []
             for px in range(len(sprite_data)):
                 color_data.append(" ")
         elif type(color_data) != str and color_mode == "single":
-            log("warning", f"empty color data detected; initializing default color data.\n    sprite_name: {name}\n    color_data_type: {type(color_data)}")
             color_data = " "
 
         # data size validator
         if  (len(sprite_data) != self.width * self.height) and self.sprite_mode == "single":
             self._valid_data = False
-            log("error", f"invalid sprite data: single-frame size mismatch.\n    sprite_name: {self.name}\n    expected_pixels: {width*height}\n    provided_pixels: {len(sprite_data)}\n    provided_color_entries: {len(color_data)}")
         elif (len(sprite_data) != self.width * self.height * sprite_cuantity) and self.sprite_mode == "multi":
             self._valid_data = False
-            log("error", f"invalid sprite data: multi-frame size mismatch.\n    sprite_name: {self.name}\n    expected_pixels: {width*height*self._sprite_cuantity}\n    provided_pixels: {len(sprite_data)}\n    provided_color_entries: {len(color_data)}")
         elif len(sprite_data) != len(color_data) and color_mode == "pixel":
             self._valid_data = False
-            log("error", f"invalid sprite data: color and pixel arrays differ in length.\n    sprite_name: {self.name}\n    expected_pixels: {width*height}\n    sprite_data_size: {len(sprite_data)}\n    color_data_size: {len(color_data)}")
-        
-        # data content validator
-        if self._color_mode == "pixel":
-            for idx in range(len(color_data)):
-                if preset_color_codes.get(color_data[idx], "") == "":
-                    log("error", f"invalid color code: entry not in preset palette.\n    sprite_name: {self.name}\n    color_mode: {self._color_mode}\n    invalid_entry: {color_data[idx]}\n    invalid_index: {idx}")
-                    break
-        elif self._color_mode == "single":
-            if preset_color_codes.get(color_data, "") == "":
-                log("error", f"invalid color code: preset lookup failed.\n    sprite_name: {self.name}\n    color_mode: {self._color_mode}\n    color_data: {color_data}")
-        
+
         self.readable_data = (sprite_data, color_data)
-        log("info", f"sprite initialized:\n    sprite_name: {self.name}\n    width: {self.width}\n    height: {self.height}\n    color_mode: {self._color_mode}\n    sprite_mode: {self.sprite_mode}\n    sprite_cuantity: {self._sprite_cuantity}\n    data_dump:\n        pixel_data: {self.readable_data[0]}\n        color_data: {self.readable_data[1]}\n ")
 
     def load_raw(self, frame = 0):
         """
@@ -249,137 +127,7 @@ class Sprite:
                     else:
                         pixel_raw_data.append("nop")
                         color_raw_data.append("")
-        log("info", f"sprite_raw_data dump\n    sprite_name: {self.name}\n    pixel_raw_data: {pixel_raw_data}\n    color_raw_data: {color_raw_data}\n ")
         return (pixel_raw_data, color_raw_data)   
-    
-class MemoryBank:
-    """
-    NOT FINISHED NOR TESTED
-    1D, 2D and 3D memory bank class for data storage and retrieval.
-    Arguments:
-        type:           The type of memory bank ("1d", "2d", "3d").
-        read_only:      If true, the memory bank is read-only.
-        dimentions:     A string representing the dimensions of the memory bank (e.g., "10", "10x10", "10x10x10").
-        default_value:  The default value to initialize the memory bank with.
-    """
-    def __init__(self, type: Literal["1d", "2d", "3d"] = "1d", read_only: bool = False, dimentions: str = "10", default_value: Literal[0, ""] = 0):
-        """
-        NOT FINISHED NOR TESTED
-        1D, 2D and 3D memory bank class for data storage and retrieval.
-        Arguments:
-            type:           The type of memory bank ("1d", "2d", "3d").
-            read_only:      If true, the memory bank is read-only.
-            dimentions:     A string representing the dimensions of the memory bank (e.g., "10", "10x10", "10x10x10").
-            default_value:  The default value to initialize the memory bank with.
-        """
-        self._type = type
-        self._writable = not read_only
-        self._default = default_value
-        self._memory = []
-        dimentions_str = dimentions.split(sep = "x")
-        dimentions_int = []
-        for val in dimentions_str:
-            dimentions_int.append(int(val))
-        self._x = 0
-        self._y = 0
-        self._z = 0
-        self._valid_dimentions = True
-        if len(dimentions_int) >= 1 and dimentions_int[0] != 0:
-            self._x = dimentions_int[0]
-        elif len(dimentions_int) >= 1 and dimentions_int[0] == 0:
-            log("error", f"invalid memory size: x dimension cannot be 0.\n    dimensions: {dimentions}\n    memory_type: {self._type}")
-            self._valid_dimentions = False
-        if len(dimentions_int) >= 2:
-            self._y = dimentions_int[1]
-        if len(dimentions_int) >= 3:
-            self._z = dimentions_int[2]
-
-    def initialize(self):
-        """
-        The memory bank initializer. Ensures that the memory bank is usable.        
-        """
-        if self._valid_dimentions == False:
-            log("error", f"memory initialization failed: invalid dimensions declared.\n    memory: {str(self)}")
-            return
-        if self._type == "1d":
-            for column in range(self._x):
-                self._memory.append(self._default)
-        elif self._type == "2d":
-            for row in range(self._y):
-                self._memory.append([])
-                for column in range(self._x):
-                    self._memory[row].append(self._default)
-        elif self._type == "3d":
-            for row in range(self._y):
-                self._memory.append([])
-                for column in range(self._x):
-                    self._memory[row].append([])
-                    for layer in range(self._z):
-                        self._memory[row][column].append(self._default)
-        
-    def get(self, memory_pointer: tuple = (0,)):
-        """
-        Retrieves data from the memory bank at the specified memory pointer.
-        Arguments:
-            memory_pointer:    A tuple representing the memory address to retrieve data from.
-        """
-        if type(memory_pointer) != tuple:
-            log("error", f"could not retrieve data: invalid memory pointer type.\n    pointer_type: {type(memory_pointer)}")
-            return 0
-        try:
-            if len(memory_pointer) == 1:
-                return self._memory[memory_pointer[0]]
-            if len(memory_pointer) == 2:
-                return self._memory[memory_pointer[0]][memory_pointer[1]]
-            if len(memory_pointer) == 3:
-                return self._memory[memory_pointer[0]][memory_pointer[1]][memory_pointer[2]]
-        except IndexError:
-            log("error", f"could not retrieve data: pointer out of bounds.\n    pointer: {memory_pointer}")
-            return 0
-    
-    def write(self, memory_pointer: tuple = (0,), data: any = ""):
-        """
-        Writes data to the memory bank at the specified memory pointer.
-        Arguments:
-            memory_pointer:    A tuple representing the memory address to write data to.
-            data:              The data to write to the specified memory address.
-        """
-        if type(memory_pointer) != tuple:
-            log("error", f"could not write data: invalid memory pointer type.\n    pointer_type: {type(memory_pointer)}")
-            return
-        try:
-            if len(memory_pointer) == 1:
-                self._memory[memory_pointer[0]] = data
-            if len(memory_pointer) == 2:
-                self._memory[memory_pointer[0]][memory_pointer[1]] = data
-            if len(memory_pointer) == 3:
-                self._memory[memory_pointer[0]][memory_pointer[1]][memory_pointer[2]] = data
-        except IndexError:
-            log("error", f"could not write data: pointer out of bounds.\n    pointer: {memory_pointer}")
-            return
-        
-    def write_bank(self, start_pointer: tuple = (0, 0, 0), information_bank: list = [[[""]]], bank_dimentions: tuple = (1, 1, 1)):
-        """
-        Writes a block of data to the memory bank at the specified starting pointer.
-        Arguments:
-            start_pointer:     A tuple representing the starting memory address to write data to.
-            information_bank:  A list containing the data block to write.
-            bank_dimentions:   A tuple representing the dimensions of the data block.
-        """
-        x, y, z = bank_dimentions
-        sx, sy, sz = start_pointer
-        if len(bank_dimentions) == 1:
-            for row in range(y):
-                self._memory[row + sy] = information_bank[row]
-        elif len(bank_dimentions) == 2:
-            for row in range(y):
-                for column in range(x):
-                    self._memory[row + sy][column + sx] = information_bank[row][column]
-        elif len(bank_dimentions) == 3:
-            for row in range(y):
-                for column in range(x):
-                    for layer in range(z):
-                        self._memory[row + sy][column + sx][layer + sz] = information_bank[row][column][layer]
 
 class Screen:
     """
@@ -443,8 +191,6 @@ class Screen:
             sprite_num:         The frame number of the sprite to draw (for multi-frame sprites).
             Sprite:             The Sprite object containing the sprite's properties.
         """
-        log("debug", f"creating sprite on screen:\n    x: {x}\n    y: {y}\n    layer: {layer}\n    sprite_num: {sprite_num}\n    sprite_name: {Sprite.name if Sprite != None else 'N/A'}")
-        log("debug", f"sprite_data_raw dump:\n    pixel_data: {sprite_data_raw[0]}\n    color_data: {sprite_data_raw[1]}")
         sprite_data = sprite_data_raw
         offset = (Sprite.height * Sprite.width) * sprite_num
         if sprite_data == None or Sprite == None:
@@ -504,7 +250,6 @@ class Screen:
             layers:    The number of layers to create.
             bg_color:  The background color code to use.
         """
-        log("system", f"initializing Screen (w={self.width} h={self.height}, layers={layers})")
         self._layers = layers
         self._bg_color = bg_color
         worklist = []
@@ -619,7 +364,6 @@ class Game:
         Arguments:
             game_code: The game code function to run. MUST BE A FUNCTION THAT TAKES NO ARGUMENTS.
         """
-        log("Engine", f"srunning game code...\n")
         game_code()
         
     def start_input(self, keys: list = ["up", "down", "left", "right", "space", "esc"]):
@@ -629,7 +373,6 @@ class Game:
         Arguments:
             keys: A list of keys to listen for.
         """
-        log("Engine", f"engine input listener initialized")
         self._actual_inputs = set()
         self._keys = keys
         def input_listener_press(keypressed):
