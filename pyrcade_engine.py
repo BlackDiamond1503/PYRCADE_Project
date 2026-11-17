@@ -1,7 +1,5 @@
-import sys, pynput, random, datetime, os, tkinter, time
-from typing import Literal, Tuple
-from copy import deepcopy
-from tcolors import TrueColor, BgTrueColor, Mod
+import datetime, tkinter, time
+from typing import Literal, Callable
 from PIL import Image, ImageTk
 from pathlib import Path
 
@@ -24,33 +22,47 @@ class Logger:
         self.logfile.write(f"{timestamp} [{type}] {message}\n")
         self.logfile.flush()
 
+    def _close(self):
+        self.log('ENGINE', 'logger closed...')
+        self.logfile.close()
+
 EngineLogger = Logger()
 EngineLogger.log("ENGINE", "Engine logger initialized")
 
-sprites = [] # Internal list that holds a reference to all the sprites that are created, used to update animations via the rendering pipeline
+sprites: list = [] # Internal list that holds a reference to all the sprites that are created, used to update animations via the rendering pipeline
 
 class Sprite:
     '''
     Base graphical class, used to create sprites and animated sprites for the game engine
     '''
-    sprite_data_file = None #Reference to a file containing all the data of the sprite
-    dimensions: Tuple[int, int] = (0, 0) #Width and height of the sprite
-    animations: dict = {} #Dictionary containing all the animation data of the sprite
-    current_animation: str = None #The name of the current animation being played
-    current_frame: int = -1 #The index of the current frame being displayed
-    loop: bool = False #Whether the animation should loop or not
-    color_palette: int = 0 #Index in the color palette list of the game
-    sprite_data: list = [] #List containing the raw "pixel" data of the sprite, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
-    sprite_index: int = 0 #The index of the current sprite being displayed, used for internal engiine shenanigans, do not touch this unless you know what you are doing
+    sprite_data_file: str
+    dimensions: tuple[int, int]
+    animations: dict
+    current_animation: str
+    current_frame: int
+    loop: bool
+    color_palette: int
+    sprite_data: list
+    sprite_index: int
+    anim_step: int
     
     def __init__(self, sprite_data_file: str):
         '''
         Base graphical class, used to create sprites and animated sprites for the game engine
         '''
-        self.sprite_data_file = sprite_data_file
+        self.sprite_data_file = sprite_data_file #Reference to a file containing all the data of the sprite
+        self.dimensions = (0, 0) #Width and height of the sprite
+        self.animations = {} #Dictionary containing all the animation data of the sprite
+        self.current_animation = None #The name of the current animation being played
+        self.current_frame = -1 #The index of the current frame being displayed
+        self.loop = False #Whether the animation should loop or not
+        self.color_palette = 0 #Index in the color palette list of the game
+        self.sprite_data = [] #List containing the raw "pixel" data of the sprite, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
+        self.anim_step = 0
+
         global sprites
         sprites.append(self)
-        self.sprite_index = len(sprites) - 1
+        self.sprite_index = len(sprites) - 1 #The index of the current sprite being displayed, used for internal engiine shenanigans, do not touch this unless you know what you are doing
         self._load_data()
 
     def _load_data(self):
@@ -68,20 +80,20 @@ class Sprite:
             frame = []
             frame_line = 0
             for line in f:
-                line = line.strip()
-                if line.startswith('[') and line.endswith(']'):
-                    reading_block = True
+                line: str = line.strip()
+                if line.startswith('[') and line.endswith(']') and not reading_block:
                     block_type = line[1:-1]
+                    reading_block = True
                 elif reading_block:
-                    if line == '[block_end]':
+                    if line == '[end]':
                         reading_block = False
                         block_type = ''
-                    elif block_type == 'dimensions':
-                        self.dimensions = tuple(line.split(','))
-                    elif block_type == 'animations':
+                    elif block_type == 'size':
+                        self.dimensions = tuple(int(i) for i in line.split(','))
+                    elif block_type == 'animation':
                         anim_name, anim_data = line.split(':')
-                        self.animations[anim_name] = list(anim_data.split(','))
-                    elif block_type == 'sprite_data':
+                        self.animations[anim_name] = [int(i) for i in anim_data.split(',')]
+                    elif block_type == 'data':
                         frame.append(line)
                         frame_line += 1
                         if frame_line == self.dimensions[1]:
@@ -112,6 +124,7 @@ class Sprite:
             EngineLogger.log("ERROR", f"Animation {animation_name} not found in sprite {self.sprite_data_file}")
             return
         self.current_animation = animation_name
+        self.anim_step = 0
         self.current_frame = self.animations[animation_name][0]
         self.loop = loop
 
@@ -123,32 +136,40 @@ class Sprite:
         if self.current_animation is None:
             return
         anim_frames = self.animations[self.current_animation]
-        self.current_frame += 1
-        if self.current_frame >= anim_frames[-1]:
+        self.anim_step += 1
+        if self.anim_step >= len(anim_frames):
             if self.loop:
-                self.current_frame = anim_frames[0]
+                self.anim_step = 0
             else:
-                self.current_frame = anim_frames[-1]
+                self.anim_step = len(anim_frames) - 1
+        self.current_frame = anim_frames[self.anim_step]
 
 class GridMap:
     '''
     Class used to draw tiles to the screen in a grid mannner. The tilemap is a 2D array of tiles, each tile is part of a file that contains the tile data and usable color pallettes for the tile map.
     '''
 
-    tileset_file = None #Reference to a file containing all the data of the tilemap
-    tile_size: Tuple[int, int] = (0, 0) #Width and height of each tile in the tilemap
-    tileset_data: list = [] #List containing the raw "pixel" data of the tilemap, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
-    x_offset: int = 0 #The x offset in pixels of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
-    y_offset: int = 0 #The y offset in pixels of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
-    gridmap: list = [] #The grid of the map, composed by a list of strings, where each character is a tile index in the tilemap_data list, used to draw the mapgrid to the screen, the mapgrid size can be grater then the screen tile capacity, in which case the mapgrid will be clipped to the screen size when drawing to the screen, and the x_offset and y_offset will be used to scroll the mapgrid around the screen
+    tileset_file: str
+    dimensions: tuple[int, int]
+    tileset_data: list[list[str]]
+    x_offset: int
+    y_offset: int
+    gridmap: list[str]
+    map_size: tuple[int, int]
 
-    def __init__(self, tileset_file: str):
+    def __init__(self, tileset_file: str, map_size: tuple[int, int]):
         '''
         Class used to draw tiles to the screen in a grid mannner. The tilemap is a 2D array of tiles, each tile is part of a file that contains the tile data and usable color pallettes for the tile map.
         Each tile is conformed by a "hex byte" string, first character is the tile index (0 - 15 / #0 - #F), and the second is the color pallette index (0 - 15 / #0 - #F), all these are put togheter to make the rows of the gridmap.
         Each tile is a 2d pixel array, where each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete, the color pallete is a list of 3 value tuples, where each value goes from 0 to 255, being RGB values for colors.
         '''
-        self.tileset_file = tileset_file
+        self.tileset_file = tileset_file #Reference to a file containing all the data of the tilemap
+        self.dimensions = (0, 0) #Width and height of each tile in the tilemap
+        self.tileset_data = [] #List containing the raw "pixel" data of the tilemap, each pixel is a number from 0 - 8, 0 is transparent and the other are an index in the color pallete
+        self.x_offset = 0 #The x offset in pixels of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
+        self.y_offset = 0 #The y offset in pixels of the tilemap, used to offset the tilemap when drawing to the screen for scrolling effects
+        self.gridmap = [] #The grid of the map, composed by a list of strings, where each character is a tile index in the tilemap_data list, used to draw the mapgrid to the screen, the mapgrid size can be grater then the screen tile capacity, in which case the mapgrid will be clipped to the screen size when drawing to the screen, and the x_offset and y_offset will be used to scroll the mapgrid around the screen
+        self.map_size = map_size
         self._load_data()
 
     def _load_data(self):
@@ -167,16 +188,16 @@ class GridMap:
             tile_line = 0
             for line in f:
                 line = line.strip()
-                if line.startswith('[') and line.endswith(']'):
+                if line.startswith('[') and line.endswith(']') and not reading_block:
                     reading_block = True
                     block_type = line[1:-1]
                 elif reading_block:
-                    if line == '[block_end]':
+                    if line == '[end]':
                         reading_block = False
                         block_type = ''
-                    elif block_type == 'dimensions':
-                        self.dimensions = tuple(line.split(','))
-                    elif block_type == 'tile_data':
+                    elif block_type == 'size':
+                        self.dimensions = tuple(int(i) for i in line.split(','))
+                    elif block_type == 'data':
                         tile.append(line)
                         tile_line += 1
                         if tile_line == self.dimensions[1]:
@@ -193,16 +214,17 @@ class GridMap:
         Changes the tileset of the tilemap to the specified tileset file, and reloads the tilemap data from the new tileset file.
         '''
         self.tileset_file = tileset_file
+        self.tileset_data = []
         self._load_data()
 
-    def setup_gridmap(self, layer: int, size: Tuple[int, int], default_tile: str = '0', default_color_palette: str = '0'):
+    def setup_gridmap(self, layer: int, default_tile: str = '0', default_color_palette: str = '0'):
         '''
         Sets up the gridmap of the tilemap, creating a 2D array of tiles with the specified size, in tiles, and filling it with the default tile and default color palette. The gridmap is a list of strings, where each character is a tile index in the tilemap_data list, used to draw the mapgrid to the screen, the mapgrid size can be grater then the screen tile capacity, in which case the mapgrid will be clipped to the screen size when drawing to the screen, and the x_offset and y_offset will be used to scroll the mapgrid around the screen.
         '''
         self.gridmap = []
-        for y in range(size[1]):
+        for y in range(self.map_size[1]):
             row = ''
-            for x in range(size[0]):
+            for x in range(self.map_size[0]):
                 row += default_tile + default_color_palette
             self.gridmap.append(row)
         self.layer = layer
@@ -220,36 +242,63 @@ class GridMap:
             EngineLogger.log("ERROR", f"X position {x} out of bounds for gridmap")
             return
         row = self.gridmap[y]
-        self.gridmap[y] = row[:x] + tile_index + color_palette_index + row[x+2:]
+        self.gridmap[y] = row[:(x*2)] + tile_index + color_palette_index + row[(x*2)+2:]
 
 class Screen:
     '''
     Class that manages the graphics rendering of the game engine. Handles basic drawing of different graphic types, as well as prosessing the layers and putting everythin togheter to output the images.
     '''
-
-    dimensions: Tuple[int, int] = (0, 0) #The dimensions of the screen, used for internal engine rendering, modify to change the size of the screen
-    layer_count: int = 0 #The number of layers the screen has, used for internal engine rendering, modify to change the number of layers
-    video_memory: list = [] #The video memory of the screen, used for internal engine rendering. Do not modify this directly, use the provided methods to draw on the screen
-    color_palettes: list = [] #The list of the color palettes of the game, each palette is a list of 3 value tuples, where each value goes from 0 to 255, being RGB values for colors
-    loaded_color_palette: list = [] #The color palette currently in use by the screen, gets updated by itself when anything is drawn to the screen. Do not modify on it's own unless aware of what you doing
-    final_frame: Image = None #The final frame that is outputted to the screen, used for internal engine rendering. Do not modify this directly, use the provided methods to draw on the screen
-    final_frame_preprocess: list = [] #The final frame that is outputted to the screen, used for internal engine rendering. Do not modify this directly, use the provided methods to draw on the screen
-
-    def __init__(self, dimensions: Tuple[int, int], layer_count: int):
+    dimensions: tuple[int, int]
+    layer_count: int
+    video_memory: list[list[list[tuple[int, int, int, int]]]]
+    color_palettes: list[list[tuple[int, int, int]]]
+    loaded_color_palette: list[tuple[int, int, int]]
+    final_frame: Image.Image
+    
+    def __init__(self, dimensions: tuple[int, int], layer_count: int, color_palettes_file: str = None):
         '''
         Class that manages the graphics rendering of the game engine. Handles basic drawing of different graphic types, as well as prosessing the layers and putting everythin togheter to output the images.
         '''
-        self.dimensions = dimensions
-        self.layer_count = layer_count
-        self.video_memory = []
+        self.dimensions = dimensions #The dimensions of the screen, used for internal engine rendering, modify to change the size of the screen
+        self.layer_count = layer_count #The number of layers the screen has, used for internal engine rendering, modify to change the number of layers
+        self.video_memory = [] #The video memory of the screen, used for internal engine rendering. Do not modify this directly, use the provided methods to draw on the screen
+        self.color_palettes = [] #The list of the color palettes of the game, each palette is a list of 3 value tuples, where each value goes from 0 to 255, being RGB values for colors
+        self.loaded_color_palette = [] #The color palette currently in use by the screen, gets updated by itself when anything is drawn to the screen. Do not modify on it's own unless aware of what you doing
+        
         for layer in range(self.layer_count):
             self.video_memory.append([])
             for y in range(self.dimensions[1]):
                 self.video_memory[layer].append([])
-                self.final_frame_preprocess[layer].append([])
                 for x in range(self.dimensions[0]):
                     self.video_memory[layer][y].append((0, 0, 0, 0)) #Initialize the video memory with empty pixels
-                    self.final_frame_preprocess[layer][y].append((0, 0, 0, 0)) #Initialize the final frame preprocess with empty pixels
+
+        if color_palettes_file is None:
+            EngineLogger.log('ENGINE', 'no color palettes file set up on the screen object, exiting...')
+            err = ValueError('No color palettes file path provided when one was expected')
+            err.add_note('No color palettes file path provided when one was expected')
+            raise err
+
+        self._load_color_palettes(color_palettes_file)
+            
+    def _load_color_palettes(self, path):
+        '''
+        INTERNAL METHOD - DO NOT CALL DIRECTLY
+        Loads the color palettes for the game from a file.
+        '''
+        with open(path, 'r') as file:
+            palettes = []
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                palette = []
+                for color in line.split(';'):
+                    if not color.strip():
+                        continue
+                    color_values = tuple(int(value) for value in color.split(','))
+                    palette.append(color_values)
+                palettes.append(palette)
+            self.color_palettes = palettes
 
     def clear_layer(self, layer: int):
         '''
@@ -269,7 +318,7 @@ class Screen:
         for layer in range(self.layer_count):
             self.clear_layer(layer)
 
-    def set_pixel(self, x: int, y: int, layer: int, color: Tuple[int, int, int, int]):
+    def set_pixel(self, x: int, y: int, layer: int, color: tuple[int, int, int, int]):
         '''
         Sets the pixel at the specified position in the specified layer to the specified color.
         '''
@@ -281,7 +330,7 @@ class Screen:
             return
         self.video_memory[layer][y][x] = color
 
-    def draw_shape(self, shape: Literal['rectangle', 'circle'], x: int, y: int, layer: int, size: Tuple[int, int], color: Tuple[int, int, int, int]):
+    def draw_shape(self, shape: Literal['rectangle', 'circle'], x: int, y: int, layer: int, size: tuple[int, int], color: tuple[int, int, int, int]):
         '''
         Draws a shape on the specified layer of the video memory.
         '''
@@ -305,17 +354,20 @@ class Screen:
         if sprite.current_frame < 0 or sprite.current_frame >= len(sprite.sprite_data):
             EngineLogger.log('ERROR', f'Sprite {sprite.sprite_data_file} has no valid current frame to draw')
             return
+        if sprite.color_palette < 0 or sprite.color_palette >= len(self.color_palettes):
+            EngineLogger.log('ERROR', f'Color palette index {sprite.color_palette} out of bounds for sprite {sprite.sprite_data_file}')
+            return
         frame_data = sprite.sprite_data[sprite.current_frame]
         for row in range(sprite.dimensions[1]):
             for col in range(sprite.dimensions[0]):
                 pixel_value = frame_data[row][col]
                 if pixel_value != '0': # Assuming '0' is transparent
-                    color_index = pixel_value #Indices start from 0
+                    color_index = int(pixel_value) #Indices start from 0
                     if color_index < 0 or color_index >= len(self.color_palettes[sprite.color_palette]):
                         EngineLogger.log('ERROR', f'Color index {color_index} out of bounds for sprite {sprite.sprite_data_file}')
                         continue
                     color = self.color_palettes[sprite.color_palette][color_index]
-                    self.set_pixel(x + col, y + row, layer, (*color, 255)) # Assuming full opacity
+                    self.set_pixel(x + col, y + row, layer, (*color[:3], 255)) # Assuming full opacity
 
     def draw_gridmap(self, x_offset: int, y_offset: int, layer: int, gridmap: GridMap):
         '''
@@ -323,8 +375,8 @@ class Screen:
         '''
         for y in range(len(gridmap.gridmap)):
             for x in range(len(gridmap.gridmap[y]) // 2):
-                tile_index = gridmap.gridmap[y][x * 2]
-                color_palette_index = gridmap.gridmap[y][x * 2 + 1]
+                tile_index = int(gridmap.gridmap[y][x * 2], 16)
+                color_palette_index = int(gridmap.gridmap[y][x * 2 + 1], 16)
                 if tile_index < 0 or tile_index >= len(gridmap.tileset_data):
                     EngineLogger.log('ERROR', f'Tile index {tile_index} out of bounds for gridmap {gridmap.tileset_file}')
                     continue
@@ -333,53 +385,57 @@ class Screen:
                     continue
                 tile_data = gridmap.tileset_data[tile_index]
                 color_palette = self.color_palettes[color_palette_index]
-                for row in range(gridmap.tile_size[1]):
-                    for col in range(gridmap.tile_size[0]):
+                for row in range(gridmap.dimensions[1]):
+                    for col in range(gridmap.dimensions[0]):
                         pixel_value = tile_data[row][col]
                         if pixel_value != '0': # Assuming '0' is transparent
-                            color_index = pixel_value #Indices start from 0
+                            color_index = int(pixel_value) #Indices start from 0
                             if color_index < 0 or color_index >= len(color_palette):
                                 EngineLogger.log('ERROR', f'Color index {color_index} out of bounds for tile {tile_index} in gridmap {gridmap.tileset_file}')
                                 continue
                             color = color_palette[color_index]
-                            self.set_pixel(x_offset + x * gridmap.tile_size[0] + col, y_offset + y * gridmap.tile_size[1] + row, layer, (*color, 255)) # Assuming full opacity
+                            self.set_pixel(x_offset + x * gridmap.dimensions[0] + col, y_offset + y * gridmap.dimensions[1] + row, layer, (*color[:3], 255)) # Assuming full opacity
 
     def render(self):
         '''
         Renders the final frame by compositing all layers in the video memory.
         '''
+        width, height = self.dimensions
+        preprocess = [(0, 0, 0, 0)] * (width * height)
         self.final_frame = Image.new('RGBA', self.dimensions, (0, 0, 0, 0))
         for layer in range(self.layer_count):
-            for y in range(self.dimensions[1]):
-                for x in range(self.dimensions[0]):
-                    pixel = self.video_memory[layer][y][x]
-                    if pixel[3] > 0: # If alpha > 0
-                        self.final_frame_preprocess[y][x] = pixel
-        for y in range(self.dimensions[1]):
-            for x in range(self.dimensions[0]):
-                self.final_frame.putpixel((x, y), self.final_frame_preprocess[y][x])
+            for y in range(height):
+                for x in range(width):
+                    if self.video_memory[layer][y][x][3] != 0:
+                        preprocess[(width * y) + x] = self.video_memory[layer][y][x]
+        self.final_frame.putdata(preprocess)
 
 class GameWindow:
-    def __init__(self, game_name: str = 'Pyrcade Game'):
+    def __init__(self, game_name: str = 'Pyrcade Game', framerate: int = 60, gameloop: Callable = None, screen: Screen = None):
+        self.succesfulsetup = False
+        if gameloop is None or screen is None:
+            EngineLogger.log('ENGINE', 'tryed to create game instance with no mainloop or screen assigned, setup failed')
+            return
         self.root = tkinter.Tk()
-        self.game_mainloop: callable #The game's mainloop as a callable to urn it when needed
-        self.screen: Screen #The game's screen object, so it can be controlled inside the ui mainloop
-        self.frame_wait: int
+        self.game_mainloop = gameloop #The game's mainloop as a callable to urn it when needed
+        self.screen: Screen = screen #The game's screen object, so it can be controlled inside the ui mainloop
+        self.frame_wait: int = 1000 // framerate
         self.last_time = time.perf_counter() #Time refence to check framerate and frametimes
         self.held_keys = set() #set of held keys at the moment
 
         self.canvas = tkinter.Canvas(self.root, highlightthickness = 0)
         self.canvas.pack(fill = 'both', expand = True)
-        self.image_id = self.canvas.create_image(0, 0)
+        self.image_id = self.canvas.create_image(0, 0, anchor = 'nw')
 
         self.root.bind('<KeyPress>', self._key_down)
-        self.root.bind('<KeyRealease>', self._key_up)
+        self.root.bind('<KeyRelease>', self._key_up)
         self.root.bind('<FocusOut>', self._clear_keys)
-        self.root.protocol('WN_DELETE_WINDOW', self.root.destroy)
+        self.root.protocol('WM_DELETE_WINDOW', self._end)
         self.game_name = game_name
 
         self.fps_frames = 0
         self.fps_started = time.perf_counter()
+        self.succesfulsetup = True
 
     def _key_down(self, event):
         self.held_keys.add(event.keysym)
@@ -397,11 +453,10 @@ class GameWindow:
 
         if elapsed >= 1.0:
             fps = self.fps_frames / elapsed
-            self.root.title(f"My Game | {fps:.1f} FPS")
+            self.root.title(f"{self.game_name} | {fps:.1f} FPS")
             self.fps_frames = 0
             self.fps_started = now
 
-        now = time.perf_counter()
         delta = min(now - self.last_time, 0.1)
         self.last_time = now
 
@@ -411,8 +466,20 @@ class GameWindow:
         self.photo = ImageTk.PhotoImage(self.screen.final_frame)
         self.canvas.itemconfigure(self.image_id, image = self.photo)
 
+        global sprites
+        for sprite in sprites:
+            sprite._update_animation()
+        
         self.root.after(self.frame_wait, self._frame)
 
     def start(self):
+        EngineLogger.log('ENGINE', 'initializing game instance startup')
+        if not self.succesfulsetup:
+            EngineLogger.log('ENGINE', 'game instance was not correctly setup, canceling startup')
+            return
         self.root.after(0, self._frame)
         self.root.mainloop()
+
+    def _end(self):
+        self.root.destroy()
+        EngineLogger._close()
